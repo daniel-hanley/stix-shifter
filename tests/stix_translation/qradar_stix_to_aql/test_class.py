@@ -37,7 +37,7 @@ translation = stix_translation.StixTranslation()
 
 class TestStixToAql(unittest.TestCase, object):
     def test_ipv4_query(self):
-        stix_pattern = "[ipv4-addr:value = '192.168.122.83' OR ipv4-addr:value = '192.168.122.84']"
+        stix_pattern = "[ipv4-addr:value = '192.168.122.83' OR ipv4-addr:value = '192.168.122.84/10']"
         query = translation.translate('qradar', 'query', '{}', stix_pattern, OPTIONS)
         where_statement = "WHERE (INCIDR('192.168.122.84/10',sourceip) OR INCIDR('192.168.122.84/10',destinationip) OR INCIDR('192.168.122.84/10',identityip)) OR (sourceip = '192.168.122.83' OR destinationip = '192.168.122.83' OR identityip = '192.168.122.83') {} {}".format(
             default_limit, default_time)
@@ -69,16 +69,16 @@ class TestStixToAql(unittest.TestCase, object):
         stix_pattern = "[url:value = 'www.example.com'] AND [mac-addr:value = '00-00-5E-00-53-00']"
         query = translation.translate('qradar', 'query', '{}', stix_pattern, OPTIONS)
         # Expect the STIX AND to convert to an AQL OR.
-        where_statement = "WHERE url = 'www.example.com' OR (sourcemac = '00-00-5E-00-53-00' OR destinationmac = '00-00-5E-00-53-00') {} {}".format(default_limit, default_time)
+        where_statement = "WHERE (url = 'www.example.com') OR ((sourcemac = '00-00-5E-00-53-00' OR destinationmac = '00-00-5E-00-53-00')) {} {}".format(default_limit, default_time)
         parsed_stix = [{'attribute': 'url:value', 'comparison_operator': '=', 'value': 'www.example.com'}, {'attribute': 'mac-addr:value', 'comparison_operator': '=', 'value': '00-00-5E-00-53-00'}]
         assert query == {'queries': [selections + from_statement + where_statement], 'parsed_stix': parsed_stix}
 
     def test_query_from_multiple_comparison_expressions_joined_by_AND(self):
-        stix_pattern = "[url:value = 'www.example.com' AND mac-addr:value = '00-00-5E-00-53-00']"
+        stix_pattern = "[(url:value = 'www.example.com' OR url:value = 'www.test.com') AND mac-addr:value = '00-00-5E-00-53-00']"
         query = translation.translate('qradar', 'query', '{}', stix_pattern, OPTIONS)
         # Expect the STIX AND to convert to an AQL AND.
-        where_statement = "WHERE (sourcemac = '00-00-5E-00-53-00' OR destinationmac = '00-00-5E-00-53-00') AND url = 'www.example.com' {} {}".format(default_limit, default_time)
-        parsed_stix = [{'attribute': 'mac-addr:value', 'comparison_operator': '=', 'value': '00-00-5E-00-53-00'}, {'attribute': 'url:value', 'comparison_operator': '=', 'value': 'www.example.com'}]
+        where_statement = "WHERE (sourcemac = '00-00-5E-00-53-00' OR destinationmac = '00-00-5E-00-53-00') AND (url = 'www.test.com' OR url = 'www.example.com') {} {}".format(default_limit, default_time)
+        parsed_stix = [{'attribute': 'mac-addr:value', 'comparison_operator': '=', 'value': '00-00-5E-00-53-00'}, {'attribute': 'url:value', 'comparison_operator': '=', 'value': 'www.test.com'}, {'attribute': 'url:value', 'comparison_operator': '=', 'value': 'www.example.com'}]        
         assert query == {'queries': [selections + from_statement + where_statement], 'parsed_stix': parsed_stix}
 
     def test_file_query(self):
@@ -297,7 +297,7 @@ class TestStixToAql(unittest.TestCase, object):
                 assert query == {'queries': [selections + from_statement + where_statement], 'parsed_stix': parsed_stix}
 
     def test_nested_parenthesis_in_pattern(self):
-        stix_pattern = "[(ipv4-addr:value = '192.168.122.83' or ipv4-addr:value = '100.100.122.90') and network-traffic:src_port = 37020] or [user-account:user_id = 'root'] and [url:value = 'www.example.com']"
+        stix_pattern = "[(ipv4-addr:value = '192.168.122.83' OR ipv4-addr:value = '100.100.122.90') AND network-traffic:src_port = 37020] OR [user-account:user_id = 'root'] AND [url:value = 'www.example.com']"
         query = translation.translate('qradar', 'query', '{}', stix_pattern, OPTIONS)
         where_statement = "WHERE (sourceport = '37020' AND ((sourceip = '100.100.122.90' OR destinationip = '100.100.122.90' OR identityip = '100.100.122.90') OR (sourceip = '192.168.122.83' OR destinationip = '192.168.122.83' OR identityip = '192.168.122.83'))) OR ((username = 'root') OR (url = 'www.example.com')) {} {}".format(default_limit, default_time)
         parsed_stix = [
